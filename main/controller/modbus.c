@@ -1,0 +1,330 @@
+#include <stdlib.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "lightmodbus/lightmodbus.h"
+#include "modbus.h"
+#include "esp_log.h"
+#include "bsp/rs485.h"
+#include "model/model.h"
+
+
+#define MODBUS_RESPONSE_03_LEN(data_len) (5 + data_len * 2)
+#define MODBUS_RESPONSE_05_LEN           8
+#define MODBUS_MESSAGE_QUEUE_SIZE        32
+#define MODBUS_TIMEOUT                   40
+#define MODBUS_MAX_PACKET_SIZE           256
+#define MODBUS_COMMUNICATION_ATTEMPTS    5
+
+#define MODBUS_IR_DEVICE_MODEL 0
+/*
+    MODBUS_HR_FIRMWARE_VERSION       ,
+    MODBUS_HR_INSTANT_ANALOG_VALUE_R1 ,
+    MODBUS_HR_INSTANT_ANALOG_VALUE_S  ,
+    MODBUS_HR_INSTANT_ANALOG_VALUE_T  ,
+    MODBUS_HR_REQUIRED_DUTY_CYCLE     ,
+    */
+
+#define MODBUS_HR_DUTY_CYCLE 0
+
+
+#define MINION_ADDR 1
+
+
+typedef enum {
+    TASK_MESSAGE_TAG_READ_STATE,
+    TASK_MESSAGE_TAG_SYNC,
+} task_message_tag_t;
+
+
+struct __attribute__((packed)) task_message {
+    task_message_tag_t tag;
+    union {
+        struct {
+            uint8_t override;
+            uint8_t percentage;
+        } override_duty_cycle;
+    } as;
+};
+
+
+typedef struct {
+    uint16_t start;
+    void    *pointer;
+} master_context_t;
+
+
+static void        modbus_task(void *args);
+static ModbusError exception_callback(const ModbusMaster *master, uint8_t address, uint8_t function,
+                                      ModbusExceptionCode code);
+static ModbusError data_callback(const ModbusMaster *master, const ModbusDataCallbackArgs *args);
+static int write_holding_registers(ModbusMaster *master, uint8_t address, uint16_t starting_address, uint16_t *data,
+                                   size_t num);
+static int read_holding_registers(ModbusMaster *master, uint16_t *registers, uint8_t address, uint16_t start,
+                                  uint16_t count);
+static int read_input_registers(ModbusMaster *master, uint16_t *registers, uint8_t address, uint16_t start,
+                                uint16_t count);
+
+
+static const char   *TAG       = "Modbus";
+static QueueHandle_t messageq  = NULL;
+static QueueHandle_t responseq = NULL;
+
+
+void modbus_init(void) {
+    static StaticQueue_t static_queue1;
+    static uint8_t       queue_buffer1[MODBUS_MESSAGE_QUEUE_SIZE * sizeof(struct task_message)] = {0};
+    messageq =
+        xQueueCreateStatic(MODBUS_MESSAGE_QUEUE_SIZE, sizeof(struct task_message), queue_buffer1, &static_queue1);
+
+    static StaticQueue_t static_queue2;
+    static uint8_t       queue_buffer2[MODBUS_MESSAGE_QUEUE_SIZE * sizeof(modbus_response_t)] = {0};
+    responseq = xQueueCreateStatic(MODBUS_MESSAGE_QUEUE_SIZE, sizeof(modbus_response_t), queue_buffer2, &static_queue2);
+
+    xTaskCreate(modbus_task, TAG, 512 * 6, NULL, 5, NULL);
+}
+
+
+void modbus_read_state(void) {
+    struct task_message msg = {.tag = TASK_MESSAGE_TAG_READ_STATE};
+    xQueueSend(messageq, &msg, 0);
+}
+
+
+void modbus_sync(model_t *pmodel) {
+    struct task_message msg = {
+        .tag = TASK_MESSAGE_TAG_SYNC,
+        .as =
+            {
+                .override_duty_cycle =
+                    {
+                        .override   = pmodel->run.override_duty_cycle,
+                        .percentage = pmodel->run.overridden_duty_cycle,
+                    },
+            },
+    };
+    xQueueSend(messageq, &msg, 0);
+}
+
+
+uint8_t modbus_get_response(modbus_response_t *response) {
+    return xQueueReceive(responseq, response, 0);
+}
+
+
+static void modbus_task(void *args) {
+    (void)args;
+    ModbusMaster    master;
+    ModbusErrorInfo err = modbusMasterInit(&master,
+                                           data_callback,              // Callback for handling incoming data
+                                           exception_callback,         // Exception callback (optional)
+                                           modbusDefaultAllocator,     // Memory allocator used to allocate request
+                                           modbusMasterDefaultFunctions,        // Set of supported functions
+                                           modbusMasterDefaultFunctionCount     // Number of supported functions
+    );
+
+    // Check for errors
+    assert(modbusIsOk(err) && "modbusMasterInit() failed");
+    struct task_message message = {0};
+
+    ESP_LOGI(TAG, "Task starting");
+
+    for (;;) {
+        if (xQueueReceive(messageq, &message, pdMS_TO_TICKS(100))) {
+            switch (message.tag) {
+                case TASK_MESSAGE_TAG_READ_STATE: {
+                    modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_READ_STATE, .error = 0};
+                    uint16_t          values[5] = {0};
+                    if (read_input_registers(&master, values, MINION_ADDR, MODBUS_IR_DEVICE_MODEL,
+                                             sizeof(values) / sizeof(values[0]))) {
+                        response.error = 1;
+                    } else {
+                        response.as.state.machine_model   = values[0];
+                        response.as.state.version_major   = (values[1] >> 11) & 0x1F;
+                        response.as.state.version_minor   = (values[1] >> 6) & 0x1F;
+                        response.as.state.version_patch   = values[1] & 0x3F;
+                        response.as.state.analog_value_r1 = values[2];
+                        response.as.state.analog_value_s  = values[3];
+                        response.as.state.analog_value_t  = values[4];
+                    }
+                    xQueueSend(responseq, &response, portMAX_DELAY);
+                    break;
+                }
+
+                case TASK_MESSAGE_TAG_SYNC: {
+                    modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_OK, .error = 0};
+                    uint16_t          values[1] = {((message.as.override_duty_cycle.override > 0) << 15) |
+                                                   message.as.override_duty_cycle.percentage};
+                    if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_CYCLE, values,
+                                                sizeof(values) / sizeof(values[0]))) {
+                        response.error = 1;
+                    }
+                    xQueueSend(responseq, &response, portMAX_DELAY);
+                    break;
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT / 2));
+        }
+    }
+
+    vTaskDelete(NULL);
+}
+
+
+static ModbusError data_callback(const ModbusMaster *master, const ModbusDataCallbackArgs *args) {
+    master_context_t *ctx = modbusMasterGetUserPointer(master);
+
+    if (ctx != NULL) {
+        switch (args->type) {
+            case MODBUS_HOLDING_REGISTER: {
+                uint16_t *buffer                 = ctx->pointer;
+                buffer[args->index - ctx->start] = args->value;
+                break;
+            }
+
+            case MODBUS_DISCRETE_INPUT: {
+                uint8_t *buffer                  = ctx->pointer;
+                buffer[args->index - ctx->start] = args->value;
+                break;
+            }
+
+            case MODBUS_INPUT_REGISTER: {
+                uint16_t *buffer                 = ctx->pointer;
+                buffer[args->index - ctx->start] = args->value;
+                break;
+            }
+
+            case MODBUS_COIL: {
+                uint8_t *buffer                  = ctx->pointer;
+                buffer[args->index - ctx->start] = args->value;
+                break;
+            }
+        }
+    }
+
+    return MODBUS_OK;
+}
+
+
+static ModbusError exception_callback(const ModbusMaster *master, uint8_t address, uint8_t function,
+                                      ModbusExceptionCode code) {
+    ESP_LOGI(TAG, "Received exception (function %d) from slave %d code %d", function, address, code);
+
+    return MODBUS_OK;
+}
+
+
+static int write_holding_registers(ModbusMaster *master, uint8_t address, uint16_t starting_address, uint16_t *data,
+                                   size_t num) {
+    uint8_t buffer[MODBUS_MAX_PACKET_SIZE] = {0};
+    int     res                            = 0;
+    size_t  counter                        = 0;
+
+    bsp_rs485_flush();
+
+    do {
+        res                 = 0;
+        ModbusErrorInfo err = modbusBuildRequest16RTU(master, address, starting_address, num, data);
+        assert(modbusIsOk(err));
+        bsp_rs485_write((uint8_t *)modbusMasterGetRequest(master), modbusMasterGetRequestLength(master));
+
+        int len = bsp_rs485_read(buffer, sizeof(buffer), pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        err     = modbusParseResponseRTU(master, modbusMasterGetRequest(master), modbusMasterGetRequestLength(master),
+                                         buffer, len);
+
+        if (!modbusIsOk(err)) {
+            ESP_LOGW(TAG, "Write holding registers for %i error (%i): %i %i", address, len, err.source, err.error);
+            res = 1;
+            vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        }
+    } while (res && ++counter < MODBUS_COMMUNICATION_ATTEMPTS);
+
+    if (res) {
+        ESP_LOGW(TAG, "ERROR!");
+    } else {
+        ESP_LOGD(TAG, "Success");
+    }
+
+    return res;
+}
+
+
+static int read_holding_registers(ModbusMaster *master, uint16_t *registers, uint8_t address, uint16_t start,
+                                  uint16_t count) {
+    ModbusErrorInfo err;
+    int             res                            = 0;
+    size_t          counter                        = 0;
+    uint8_t         buffer[MODBUS_MAX_PACKET_SIZE] = {0};
+
+    bsp_rs485_flush();
+
+    master_context_t ctx = {.pointer = registers, .start = start};
+    if (registers == NULL) {
+        modbusMasterSetUserPointer(master, NULL);
+    } else {
+        modbusMasterSetUserPointer(master, &ctx);
+    }
+
+    do {
+        res = 0;
+        err = modbusBuildRequest03RTU(master, address, start, count);
+        assert(modbusIsOk(err));
+
+        bsp_rs485_write((uint8_t *)modbusMasterGetRequest(master), modbusMasterGetRequestLength(master));
+
+        int len = bsp_rs485_read(buffer, sizeof(buffer), pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        err     = modbusParseResponseRTU(master, modbusMasterGetRequest(master), modbusMasterGetRequestLength(master),
+                                         buffer, len);
+
+        if (!modbusIsOk(err)) {
+            ESP_LOGW(TAG, "Read holding registers for %i error (%i): %i %i", address, len, err.source, err.error);
+            res = 1;
+            vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        }
+    } while (res && ++counter < MODBUS_COMMUNICATION_ATTEMPTS);
+
+    return res;
+}
+
+
+static int read_input_registers(ModbusMaster *master, uint16_t *registers, uint8_t address, uint16_t start,
+                                uint16_t count) {
+    ModbusErrorInfo err;
+    int             res                            = 0;
+    size_t          counter                        = 0;
+    uint8_t         buffer[MODBUS_MAX_PACKET_SIZE] = {0};
+
+    master_context_t ctx = {.pointer = registers, .start = start};
+    if (registers == NULL) {
+        modbusMasterSetUserPointer(master, NULL);
+    } else {
+        modbusMasterSetUserPointer(master, &ctx);
+    }
+
+    bsp_rs485_flush();
+
+    do {
+        res = 0;
+        err = modbusBuildRequest04RTU(master, address, start, count);
+        assert(modbusIsOk(err));
+
+        bsp_rs485_write((uint8_t *)modbusMasterGetRequest(master), modbusMasterGetRequestLength(master));
+
+        int len = bsp_rs485_read(buffer, sizeof(buffer), pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        err     = modbusParseResponseRTU(master, modbusMasterGetRequest(master), modbusMasterGetRequestLength(master),
+                                         buffer, len);
+
+        if (!modbusIsOk(err)) {
+            // ESP_LOGW(TAG, "Read input registers for %i error (%i): %i %i", address, len, err.source, err.error);
+            res = 1;
+            vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT));
+        }
+    } while (res && ++counter < MODBUS_COMMUNICATION_ATTEMPTS);
+
+    if (res) {
+        // ESP_LOGW(TAG, "ERROR!");
+    } else {
+        ESP_LOGD(TAG, "Success");
+    }
+
+    return res;
+}

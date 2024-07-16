@@ -3,8 +3,12 @@
 #include "model.h"
 
 
-void model_init(mut_model_t *pmodel) {
-    assert(pmodel != NULL);
+void model_init(mut_model_t *model) {
+    assert(model != NULL);
 
-    pmodel->config.language = 0;
+    model->config.language = 0;
+
+    model->run.override_duty_cycle   = 0;
+    model->run.overridden_duty_cycle = 0;
+    model->run.communication_error   = 0;
 }

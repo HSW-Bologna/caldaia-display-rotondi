@@ -107,7 +107,7 @@ void bsp_tft_display_init(void (*display_flush_ready_cb)(void), size_t buffer_si
 
     const esp_lcd_panel_dev_config_t lcd_config = {
         .reset_gpio_num = BSP_HAP_RESET_D,
-        .color_space    = LCD_RGB_ELEMENT_ORDER_RGB,
+        .color_space    = LCD_RGB_ELEMENT_ORDER_BGR,
         .bits_per_pixel = 18,
         .flags          = {.reset_active_high = 0},
         .vendor_config  = NULL,

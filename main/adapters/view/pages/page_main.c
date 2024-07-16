@@ -8,12 +8,26 @@
 #include <esp_log.h>
 
 
-static const char *TAG = "PageMain";
+enum {
+    BTN_ONOFF_ID,
+    SLIDER_PERCENTAGE_ID,
+};
 
 
 struct page_data {
+    lv_obj_t *btn_onoff;
+    lv_obj_t *lbl_percentage;
+    lv_obj_t *lbl_communication_error;
+    lv_obj_t *slider_percentage;
+
     view_controller_msg_t cmsg;
 };
+
+
+static void update_page(model_t *model, struct page_data *pdata);
+
+
+static const char *TAG = "PageMain";
 
 
 static void *create_page(pman_handle_t handle, void *extra) {
@@ -22,55 +36,119 @@ static void *create_page(pman_handle_t handle, void *extra) {
 
     struct page_data *pdata = lv_malloc(sizeof(struct page_data));
     assert(pdata != NULL);
+
+    ESP_LOGI(TAG, "Created");
+
     return pdata;
 }
 
 
 static void open_page(pman_handle_t handle, void *state) {
     struct page_data *pdata = state;
-    (void)pdata;
 
-    model_t *p_model = pman_get_user_data(handle);
+    model_t *model = view_get_model(handle);
 
-    lv_obj_t *btn, *lbl;
+    {
+        lv_obj_t *btn = lv_btn_create(lv_scr_act());
+        view_register_object_default_callback(btn, BTN_ONOFF_ID);
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_obj_center(lbl);
+        lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -16);
+        pdata->btn_onoff = btn;
+    }
 
-    btn = lv_btn_create(lv_scr_act());
-    lbl = lv_label_create(btn);
-    lv_label_set_text(lbl, view_intl_get_string(p_model, STRINGS_HELLO_WORLD));
-    lv_obj_center(lbl);
-    lv_obj_center(btn);
+    {
+        lv_obj_t *lbl = lv_label_create(lv_scr_act());
+        lv_obj_align(lbl, LV_ALIGN_TOP_RIGHT, 0, 0);
+        lv_obj_set_style_text_color(lbl, VIEW_STYLE_COLOR_RED, LV_STATE_DEFAULT);
+        lv_label_set_text(lbl, "Errore di comunicazione");
+        pdata->lbl_communication_error = lbl;
+    }
 
-    btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn, 64, 64);
-    lv_obj_align(btn, LV_ALIGN_BOTTOM_LEFT, 16, -16);
+    {
+        lv_obj_t *slider = lv_slider_create(lv_scr_act());
+        lv_obj_set_size(slider, LV_PCT(85), 48);
+        lv_slider_set_range(slider, 0, 100);
+        lv_obj_align(slider, LV_ALIGN_CENTER, 0, -32);
+        view_register_object_default_callback(slider, SLIDER_PERCENTAGE_ID);
+        pdata->slider_percentage = slider;
 
-    btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn, 64, 64);
-    lv_obj_align(btn, LV_ALIGN_BOTTOM_RIGHT, -16, -16);
+        lv_obj_t *lbl = lv_label_create(lv_scr_act());
+        lv_obj_align_to(lbl, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+        pdata->lbl_percentage = lbl;
+    }
 
-    btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn, 64, 64);
-    lv_obj_align(btn, LV_ALIGN_TOP_LEFT, 16, 16);
+    VIEW_ADD_WATCHED_VARIABLE(&model->run.communication_error, 0);
 
-    btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn, 64, 64);
-    lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -16, 16);
-
-    ESP_LOGI(TAG, "Main open");
+    update_page(model, pdata);
 }
 
 
 static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t event) {
-    (void)handle;
-
     pman_msg_t msg = PMAN_MSG_NULL;
 
     struct page_data *pdata = state;
+
+    mut_model_t *model = view_get_model(handle);
 
     msg.user_msg    = &pdata->cmsg;
     pdata->cmsg.tag = VIEW_CONTROLLER_MESSAGE_TAG_NOTHING;
 
     switch (event.tag) {
+        case PMAN_EVENT_TAG_USER: {
+            view_event_t *view_event = event.as.user;
+            switch (view_event->tag) {
+                case VIEW_EVENT_TAG_PAGE_WATCHER: {
+                    update_page(model, pdata);
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            break;
+        }
+
+        case PMAN_EVENT_TAG_LVGL: {
+            lv_obj_t        *target   = lv_event_get_current_target_obj(event.as.lvgl);
+            view_obj_data_t *obj_data = lv_obj_get_user_data(target);
+
+            switch (lv_event_get_code(event.as.lvgl)) {
+                case LV_EVENT_CLICKED: {
+                    switch (obj_data->id) {
+                        case BTN_ONOFF_ID: {
+                            model->run.override_duty_cycle = !model->run.override_duty_cycle;
+                            update_page(model, pdata);
+                            break;
+                        }
+
+                        default:
+                            break;
+                    }
+                    break;
+                }
+
+                case LV_EVENT_VALUE_CHANGED: {
+                    switch (obj_data->id) {
+                        case SLIDER_PERCENTAGE_ID: {
+                            model->run.overridden_duty_cycle = lv_slider_get_value(target);
+                            update_page(model, pdata);
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            break;
+        }
+
         default:
             break;
     }
@@ -79,10 +157,32 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
 }
 
 
+static void update_page(model_t *model, struct page_data *pdata) {
+    if (model->run.override_duty_cycle) {
+        lv_obj_clear_state(pdata->slider_percentage, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(pdata->btn_onoff, VIEW_STYLE_COLOR_GREEN, LV_STATE_DEFAULT);
+        lv_label_set_text(lv_obj_get_child(pdata->btn_onoff, 0), "ON");
+    } else {
+        lv_obj_add_state(pdata->slider_percentage, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(pdata->btn_onoff, VIEW_STYLE_COLOR_RED, LV_STATE_DEFAULT);
+        lv_label_set_text(lv_obj_get_child(pdata->btn_onoff, 0), "OFF");
+    }
+
+    lv_label_set_text_fmt(pdata->lbl_percentage, "%i%%", model->run.overridden_duty_cycle);
+}
+
+
+static void close_page(void *state) {
+    (void)state;
+    view_clear_watcher();
+    lv_obj_clean(lv_scr_act());
+}
+
+
 const pman_page_t page_main = {
     .create        = create_page,
     .destroy       = pman_destroy_all,
     .open          = open_page,
-    .close         = pman_close_all,
+    .close         = close_page,
     .process_event = page_event,
 };

@@ -8,9 +8,9 @@
 
 #define GETTER(name, field)                                                                                            \
     static inline                                                                                                      \
-        __attribute__((always_inline, const)) typeof(((mut_model_t *)0)->field) model_get_##name(model_t *pmodel) {     \
-        assert(pmodel != NULL);                                                                                         \
-        return pmodel->field;                                                                                           \
+        __attribute__((always_inline, const)) typeof(((mut_model_t *)0)->field) model_get_##name(model_t *pmodel) {    \
+        assert(pmodel != NULL);                                                                                        \
+        return pmodel->field;                                                                                          \
     }
 
 
@@ -18,6 +18,12 @@ struct model {
     struct {
         uint16_t language;
     } config;
+
+    struct {
+        uint8_t communication_error;
+        uint8_t override_duty_cycle;
+        uint8_t overridden_duty_cycle;
+    } run;
 };
 
 
