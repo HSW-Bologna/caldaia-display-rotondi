@@ -4,11 +4,13 @@
 #include "gui.h"
 #include "modbus.h"
 #include "services/timestamp.h"
+#include "observer.h"
 
 
 void controller_init(mut_model_t *model) {
     (void)model;
 
+    observer_init(model);
     modbus_init();
 
     view_change_page(&page_main);
@@ -40,6 +42,7 @@ void controller_manage(mut_model_t *model) {
     }
 
     controller_gui_manage();
+    observer_manage(model);
 
     if (timestamp_is_expired(minion_ts, 500)) {
         modbus_read_state();
