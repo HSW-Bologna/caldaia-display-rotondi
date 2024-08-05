@@ -23,6 +23,11 @@ struct model {
         uint8_t communication_error;
         uint8_t override_duty_cycle;
         uint8_t overridden_duty_cycle;
+
+        uint8_t output_percentage;
+
+        uint16_t pressure_setpoint_decibar;
+        uint16_t pressure_decibar;
     } run;
 };
 
@@ -32,6 +37,7 @@ typedef struct model       mut_model_t;
 
 
 void model_init(mut_model_t *pmodel);
+void model_modify_pressure_setpoint(mut_model_t *model, int16_t change);
 
 
 GETTER(language, config.language);

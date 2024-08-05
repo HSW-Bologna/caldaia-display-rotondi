@@ -45,8 +45,8 @@ void controller_manage(mut_model_t *model) {
     observer_manage(model);
 
     if (timestamp_is_expired(minion_ts, 500)) {
-        modbus_read_state();
-        modbus_sync(model);
+        //modbus_read_state();
+        //modbus_sync(model);
         minion_ts = timestamp_get();
     }
 }
