@@ -39,6 +39,8 @@ static void *create_page(pman_handle_t handle, void *extra) {
 
 
 static void open_page(pman_handle_t handle, void *state) {
+    (void)handle;
+
     struct page_data *pdata = state;
     pman_timer_resume(pdata->timer);
     pdata->valid  = 0;
@@ -66,7 +68,7 @@ static void open_page(pman_handle_t handle, void *state) {
     lv_obj_set_width(ta, LV_PCT(50));
     lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 8);
-    lv_obj_set_style_text_font(ta, STYLE_FONT_BIG, LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ta, STYLE_FONT_MEDIUM, LV_STATE_DEFAULT);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, LV_STATE_DEFAULT);
     lv_obj_add_state(ta, LV_STATE_FOCUSED);
     pdata->textarea = ta;
@@ -87,6 +89,8 @@ static void open_page(pman_handle_t handle, void *state) {
 
 
 static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t event) {
+    (void)handle;
+
     pman_msg_t msg = PMAN_MSG_NULL;
 
     struct page_data *pdata = state;
@@ -113,6 +117,7 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
                     break;
                 }
 
+                case LV_EVENT_VALUE_CHANGED:
                 case LV_EVENT_LONG_PRESSED_REPEAT:
                 case LV_EVENT_PRESSED: {
                     pman_timer_reset(pdata->timer);

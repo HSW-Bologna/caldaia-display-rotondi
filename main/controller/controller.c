@@ -5,6 +5,10 @@
 #include "modbus.h"
 #include "services/timestamp.h"
 #include "observer.h"
+#include "esp_log.h"
+
+
+static const char *TAG = "Controller";
 
 
 void controller_init(mut_model_t *model) {
@@ -36,6 +40,7 @@ void controller_manage(mut_model_t *model) {
                 }
 
                 case MODBUS_RESPONSE_TAG_READ_STATE:
+                    model->run.communication_error = response.error;
                     break;
             }
         }
@@ -45,8 +50,8 @@ void controller_manage(mut_model_t *model) {
     observer_manage(model);
 
     if (timestamp_is_expired(minion_ts, 500)) {
-        //modbus_read_state();
-        //modbus_sync(model);
+        modbus_read_state();
+        modbus_sync(model);
         minion_ts = timestamp_get();
     }
 }

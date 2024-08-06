@@ -314,14 +314,14 @@ static int read_input_registers(ModbusMaster *master, uint16_t *registers, uint8
                                          buffer, len);
 
         if (!modbusIsOk(err)) {
-            // ESP_LOGW(TAG, "Read input registers for %i error (%i): %i %i", address, len, err.source, err.error);
+            ESP_LOGW(TAG, "Read input registers for %i error (%i): %i %i", address, len, err.source, err.error);
             res = 1;
             vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT));
         }
     } while (res && ++counter < MODBUS_COMMUNICATION_ATTEMPTS);
 
     if (res) {
-        // ESP_LOGW(TAG, "ERROR!");
+        ESP_LOGW(TAG, "ERROR!");
     } else {
         ESP_LOGD(TAG, "Success");
     }

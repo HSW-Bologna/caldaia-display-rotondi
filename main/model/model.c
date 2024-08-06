@@ -15,6 +15,7 @@ void model_init(mut_model_t *model) {
     model->run.communication_error       = 0;
     model->run.pressure_setpoint_decibar = APP_CONFIG_MIN_PRESSURE_SETPOINT_DECIBAR;
     model->run.pressure_decibar          = 0;
+    model->run.pressure_adc              = 0;
 }
 
 

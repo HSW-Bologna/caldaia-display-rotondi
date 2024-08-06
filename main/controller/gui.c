@@ -23,5 +23,6 @@ void controller_gui_manage(void) {
     }
 #endif
 
+    view_manage();
     lv_timer_handler();
 }

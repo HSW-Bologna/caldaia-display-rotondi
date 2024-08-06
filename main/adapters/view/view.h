@@ -56,7 +56,7 @@ void         view_clear_watcher(void);
 void         view_add_watched_variable(void *ptr, size_t size, int code);
 
 
-extern const pman_page_t page_main, page_password, page_test_phase_cut;
+extern const pman_page_t page_main, page_password, page_test_phase_cut, page_test_adc;
 
 
 #endif

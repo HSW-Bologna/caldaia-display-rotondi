@@ -28,6 +28,7 @@ struct model {
 
         uint16_t pressure_setpoint_decibar;
         uint16_t pressure_decibar;
+        uint16_t pressure_adc;
     } run;
 };
 

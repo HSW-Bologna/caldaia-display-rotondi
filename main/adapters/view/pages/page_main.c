@@ -10,20 +10,25 @@
 #include <esp_log.h>
 
 
-#define SETTINGS_DRAG_WIDTH  32
-#define SETTINGS_BTN_WIDTH   64
-#define SETTINGS_BTN_PADDING 8
+#define SETTINGS_DRAG_WIDTH    32
+#define SETTINGS_DRAG_HEIGHT   100
+#define SETTINGS_DRAWER_WIDTH  128
+#define SETTINGS_DRAWER_HEIGHT LV_HOR_RES
+#define SETTINGS_BTN_WIDTH     64
 
 LV_IMG_DECLARE(img_boiler_off);
 LV_IMG_DECLARE(img_boiler_heat);
 LV_IMG_DECLARE(img_water_still);
 LV_IMG_DECLARE(img_pressostat_low);
+LV_IMG_DECLARE(img_connection);
 
 
 enum {
     OBJ_SETTINGS_ID,
     BTN_PLUS_ID,
     BTN_MINUS_ID,
+    WATCHER_COMMUNICATION_ID,
+    WATCHER_BOILER_ID,
 };
 
 
@@ -34,6 +39,10 @@ struct page_data {
     lv_obj_t *img_pressostat;
 
     lv_obj_t *lbl_setpoint;
+
+    lv_obj_t *obj_handle;
+    lv_obj_t *obj_drawer;
+    lv_obj_t *obj_alarm;
 
     pman_timer_t *timer;
 };
@@ -77,6 +86,23 @@ static void open_page(pman_handle_t handle, void *state) {
         lv_obj_add_style(btn, (lv_style_t *)&style_black_border, LV_STATE_DEFAULT);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_align(btn, LV_ALIGN_LEFT_MID, 8, 0);
+
+        lv_obj_t *obj_alarm = lv_obj_create(background);
+        lv_obj_set_size(obj_alarm, 320 - 16, 320 - 16);
+        lv_obj_align(obj_alarm, LV_ALIGN_LEFT_MID, 8, 0);
+        lv_obj_set_style_bg_opa(obj_alarm, LV_OPA_50, LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(obj_alarm, LV_OPA_50, LV_STATE_DEFAULT);
+
+        lv_obj_t *cont = lv_obj_create(obj_alarm);
+        lv_obj_set_style_radius(cont, LV_RADIUS_CIRCLE, LV_STATE_DEFAULT);
+        lv_obj_set_size(cont, 96, 96);
+        lv_obj_center(cont);
+
+        lv_obj_t *img_alarm = lv_img_create(cont);
+        lv_img_set_src(img_alarm, &img_connection);
+        lv_obj_center(img_alarm);
+
+        pdata->obj_alarm = obj_alarm;
 
         lv_obj_t *img_boiler = lv_img_create(btn);
         lv_img_set_src(img_boiler, &img_boiler_off);
@@ -140,20 +166,29 @@ static void open_page(pman_handle_t handle, void *state) {
 
     {
         lv_obj_t *obj = lv_obj_create(background);
-        lv_obj_set_size(obj, SETTINGS_DRAG_WIDTH + SETTINGS_BTN_WIDTH, LV_PCT(100));
-        lv_obj_align(obj, LV_ALIGN_RIGHT_MID, SETTINGS_BTN_WIDTH, 0);
+        lv_obj_set_size(obj, SETTINGS_DRAG_WIDTH, SETTINGS_DRAG_HEIGHT);
+        lv_obj_align(obj, LV_ALIGN_RIGHT_MID, 0, 0);
         lv_obj_add_style(obj, (lv_style_t *)&style_transparent_cont, LV_STATE_DEFAULT);
         lv_obj_add_style(obj, (lv_style_t *)&style_padless_cont, LV_STATE_DEFAULT);
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
         view_register_object_default_callback(obj, OBJ_SETTINGS_ID);
+        pdata->obj_handle = obj;
 
-        lv_obj_t *btn = lv_btn_create(obj);
-        lv_obj_set_size(btn, SETTINGS_BTN_WIDTH - SETTINGS_BTN_PADDING, SETTINGS_BTN_WIDTH - SETTINGS_BTN_PADDING);
+        lv_obj_t *cont = lv_obj_create(background);
+        lv_obj_set_size(cont, SETTINGS_DRAWER_WIDTH, SETTINGS_DRAWER_HEIGHT);
+        lv_obj_align_to(cont, obj, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+        pdata->obj_drawer = cont;
+
+        lv_obj_t *btn = lv_btn_create(cont);
+        lv_obj_set_size(btn, SETTINGS_BTN_WIDTH, SETTINGS_BTN_WIDTH);
         lv_obj_t *lbl = lv_label_create(btn);
         lv_label_set_text(lbl, LV_SYMBOL_SETTINGS);
         lv_obj_center(lbl);
-        lv_obj_align(btn, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_align(btn, LV_ALIGN_CENTER, 0, 0);
     }
+
+    VIEW_ADD_WATCHED_VARIABLE(&model->run.communication_error, WATCHER_COMMUNICATION_ID);
+    VIEW_ADD_WATCHED_VARIABLE(&model->run.output_percentage, WATCHER_BOILER_ID);
 
     update_page(model, pdata);
 }
@@ -205,8 +240,9 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
 
                                 lv_coord_t x = lv_obj_get_x_aligned(target) + vect.x;
 
-                                if (x >= 0 && x <= SETTINGS_BTN_WIDTH) {
+                                if (x <= 0 && x >= -SETTINGS_DRAWER_WIDTH) {
                                     lv_obj_set_x(target, x);
+                                    lv_obj_align_to(pdata->obj_drawer, target, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
                                 }
                             }
                             break;
@@ -223,13 +259,14 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
                         case OBJ_SETTINGS_ID: {
                             lv_coord_t x = lv_obj_get_x_aligned(target);
 
-                            if (x <= SETTINGS_DRAG_WIDTH / 2) {
-                                lv_obj_align(target, LV_ALIGN_RIGHT_MID, 0, 0);
+                            if (x <= -SETTINGS_DRAWER_WIDTH / 2) {
+                                lv_obj_align(target, LV_ALIGN_RIGHT_MID, -SETTINGS_DRAWER_WIDTH, 0);
                                 pman_timer_reset(pdata->timer);
                                 pman_timer_resume(pdata->timer);
                             } else {
-                                lv_obj_align(target, LV_ALIGN_RIGHT_MID, SETTINGS_BTN_WIDTH, 0);
+                                lv_obj_align(target, LV_ALIGN_RIGHT_MID, 0, 0);
                             }
+                            lv_obj_align_to(pdata->obj_drawer, target, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
                             break;
                         }
 
@@ -298,6 +335,14 @@ static void update_page(model_t *model, struct page_data *pdata) {
     lv_label_set_text_fmt(pdata->lbl_setpoint, "%.1f", setpoint);
 
     lv_obj_set_style_opa(pdata->img_heat, (LV_OPA_COVER * model->run.output_percentage) / 100, LV_STATE_DEFAULT);
+
+    ESP_LOGI(TAG, "%i", model->run.communication_error);
+
+    if (model->run.communication_error) {
+        view_common_set_hidden(pdata->obj_alarm, 0);
+    } else {
+        view_common_set_hidden(pdata->obj_alarm, 1);
+    }
 }
 
 
