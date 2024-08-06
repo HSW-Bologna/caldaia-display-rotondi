@@ -133,6 +133,10 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
                             break;
 
                         case BTN_PREV_ID:
+                            model->run.override_duty_cycle = 0;
+                            msg.stack_msg                  = PMAN_STACK_MSG_SWAP(&page_test_pid);
+                            break;
+
                         case BTN_NEXT_ID:
                             model->run.override_duty_cycle = 0;
                             msg.stack_msg                  = PMAN_STACK_MSG_SWAP(&page_test_adc);

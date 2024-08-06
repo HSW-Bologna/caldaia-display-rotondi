@@ -27,6 +27,7 @@ typedef struct {
             uint16_t analog_value_t;
             uint16_t analog_value_pressure;
             uint16_t pressure_millibar;
+            uint16_t pid_error;
         } state;
     } as;
 } modbus_response_t;

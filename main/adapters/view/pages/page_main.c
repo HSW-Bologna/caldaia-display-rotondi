@@ -202,11 +202,18 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
     mut_model_t *model = view_get_model(handle);
 
     switch (event.tag) {
+        case PMAN_EVENT_TAG_OPEN: {
+            model_boiler_enable(model, 1);
+            model->run.override_duty_cycle = 0;
+            break;
+        }
+
         case PMAN_EVENT_TAG_TIMER: {
-            pman_stack_msg_t         pw_msg = PMAN_STACK_MSG_SWAP(&page_test_phase_cut);
+            pman_stack_msg_t         pw_msg = PMAN_STACK_MSG_SWAP(&page_menu);
             password_page_options_t *opts =
                 view_common_default_password_page_options(pw_msg, (const char *)APP_CONFIG_PASSWORD);
             msg.stack_msg = PMAN_STACK_MSG_PUSH_PAGE_EXTRA(&page_password, opts);
+            model_boiler_enable(model, 0);
             break;
         }
 
@@ -331,7 +338,7 @@ static void update_page(model_t *model, struct page_data *pdata) {
     lv_img_set_src(pdata->img_water, &img_water_still);
     lv_img_set_src(pdata->img_pressostat, &img_pressostat_low);
 
-    float setpoint = ((float)model->run.pressure_setpoint_decibar) / 10.;
+    float setpoint = ((float)model->config.pressure_setpoint_decibar) / 10.;
     lv_label_set_text_fmt(pdata->lbl_setpoint, "%.1f", setpoint);
 
     lv_obj_set_style_opa(pdata->img_heat, (LV_OPA_COVER * model->run.output_percentage) / 100, LV_STATE_DEFAULT);

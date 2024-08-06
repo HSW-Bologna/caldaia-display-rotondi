@@ -17,7 +17,7 @@
 
 #define MODBUS_IR_DEVICE_MODEL 0
 
-#define MODBUS_HR_DUTY_CYCLE 0
+#define MODBUS_HR_DUTY_POWER 0
 
 
 #define MINION_ADDR 1
@@ -33,9 +33,13 @@ struct __attribute__((packed)) task_message {
     task_message_tag_t tag;
     union {
         struct {
+            uint8_t  power;
             uint8_t  override;
             uint8_t  percentage;
             uint16_t pressure_setpoint_decibar;
+            uint16_t kp;
+            uint16_t ki;
+            uint16_t kd;
         } sync;
     } as;
 };
@@ -91,9 +95,13 @@ void modbus_sync(model_t *model) {
             {
                 .sync =
                     {
+                        .power                     = model->run.boiler_enabled,
                         .override                  = model->run.override_duty_cycle,
                         .percentage                = model->run.overridden_duty_cycle,
-                        .pressure_setpoint_decibar = model->run.pressure_setpoint_decibar,
+                        .pressure_setpoint_decibar = model->config.pressure_setpoint_decibar,
+                        .kp                        = model->config.pid_kp,
+                        .ki                        = model->config.pid_ki,
+                        .kd                        = model->config.pid_kd,
                     },
             },
     };
@@ -128,7 +136,7 @@ static void modbus_task(void *args) {
             switch (message.tag) {
                 case TASK_MESSAGE_TAG_READ_STATE: {
                     modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_READ_STATE, .error = 0};
-                    uint16_t          values[8] = {0};
+                    uint16_t          values[9] = {0};
                     if (read_input_registers(&master, values, MINION_ADDR, MODBUS_IR_DEVICE_MODEL,
                                              sizeof(values) / sizeof(values[0]))) {
                         response.error = 1;
@@ -137,12 +145,13 @@ static void modbus_task(void *args) {
                         response.as.state.version_major         = (values[1] >> 11) & 0x1F;
                         response.as.state.version_minor         = (values[1] >> 6) & 0x1F;
                         response.as.state.version_patch         = values[1] & 0x3F;
-                        response.as.state.output_percentage     = values[2];
-                        response.as.state.analog_value_r1       = values[3];
-                        response.as.state.analog_value_s        = values[4];
-                        response.as.state.analog_value_t        = values[5];
-                        response.as.state.analog_value_pressure = values[6];
-                        response.as.state.pressure_millibar     = values[7];
+                        response.as.state.analog_value_r1       = values[2];
+                        response.as.state.analog_value_s        = values[3];
+                        response.as.state.analog_value_t        = values[4];
+                        response.as.state.analog_value_pressure = values[5];
+                        response.as.state.pressure_millibar     = values[6];
+                        response.as.state.output_percentage     = values[7];
+                        response.as.state.pid_error             = values[8];
                     }
                     xQueueSend(responseq, &response, portMAX_DELAY);
                     break;
@@ -150,11 +159,15 @@ static void modbus_task(void *args) {
 
                 case TASK_MESSAGE_TAG_SYNC: {
                     modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_OK, .error = 0};
-                    uint16_t          values[2] = {
+                    uint16_t          values[6] = {
+                        message.as.sync.power,
                         ((message.as.sync.override > 0) << 15) | message.as.sync.percentage,
                         message.as.sync.pressure_setpoint_decibar,
+                        message.as.sync.kp,
+                        message.as.sync.ki,
+                        message.as.sync.kd,
                     };
-                    if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_CYCLE, values,
+                    if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_POWER, values,
                                                 sizeof(values) / sizeof(values[0]))) {
                         response.error = 1;
                     }

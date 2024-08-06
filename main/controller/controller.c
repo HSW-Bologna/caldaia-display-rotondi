@@ -6,6 +6,7 @@
 #include "services/timestamp.h"
 #include "observer.h"
 #include "esp_log.h"
+#include "configuration.h"
 
 
 static const char *TAG = "Controller";
@@ -14,10 +15,13 @@ static const char *TAG = "Controller";
 void controller_init(mut_model_t *model) {
     (void)model;
 
+    configuration_load(model);
     observer_init(model);
     modbus_init();
 
     view_change_page(&page_main);
+
+    ESP_LOGI(TAG, "Initialized");
 }
 
 
@@ -41,6 +45,19 @@ void controller_manage(mut_model_t *model) {
 
                 case MODBUS_RESPONSE_TAG_READ_STATE:
                     model->run.communication_error = response.error;
+
+                    if (!response.error) {
+                        model->run.machine_firmware_version_major = response.as.state.version_major;
+                        model->run.machine_firmware_version_minor = response.as.state.version_minor;
+                        model->run.machine_firmware_version_patch = response.as.state.version_patch;
+                        model->run.pressure_adc                   = response.as.state.analog_value_pressure;
+                        model->run.adc_r1                         = response.as.state.analog_value_r1;
+                        model->run.adc_s                          = response.as.state.analog_value_s;
+                        model->run.adc_t                          = response.as.state.analog_value_t;
+                        model->run.pressure_millibar              = response.as.state.pressure_millibar;
+                        model->run.output_percentage              = response.as.state.output_percentage;
+                        model->run.pid_error                      = response.as.state.pid_error;
+                    }
                     break;
             }
         }

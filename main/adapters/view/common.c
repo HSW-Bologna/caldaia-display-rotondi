@@ -22,7 +22,7 @@ password_page_options_t *view_common_default_password_page_options(pman_stack_ms
 
 
 lv_obj_t *view_common_create_title(lv_obj_t *root, const char *text, int back_id, int prev_id, int next_id) {
-    lv_obj_t *btn, *lbl, *cont, *img;
+    lv_obj_t *btn, *lbl, *cont;
 
     cont = lv_obj_create(root);
     lv_obj_add_style(cont, (lv_style_t *)&style_padless_cont, LV_STATE_DEFAULT);
