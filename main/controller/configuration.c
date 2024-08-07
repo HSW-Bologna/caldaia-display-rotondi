@@ -3,28 +3,33 @@
 #include "configuration.h"
 
 
-const char *CONFIGURATION_SETPOINT_KEY = "SETPOINT";
-const char *CONFIGURATION_PID_KP_KEY   = "PIDKPRO";
-const char *CONFIGURATION_PID_KI_KEY   = "PIDKINT";
-const char *CONFIGURATION_PID_KD_KEY   = "PIDKDER";
+const char *CONFIGURATION_SETPOINT_KEY        = "SETPOINT";
+const char *CONFIGURATION_PRESSURE_OFFSET_KEY = "OFFSET";
+const char *CONFIGURATION_PID_KP_KEY          = "PIDKPRO";
+const char *CONFIGURATION_PID_KI_KEY          = "PIDKINT";
+const char *CONFIGURATION_PID_KD_KEY          = "PIDKDER";
 
 
 void configuration_load(mut_model_t *model) {
     uint16_t coefficent = 0;
 
     storage_load_uint16(&model->config.pressure_setpoint_decibar, CONFIGURATION_SETPOINT_KEY);
+    storage_load_uint16(&model->config.pressure_offset_millibar, CONFIGURATION_PRESSURE_OFFSET_KEY);
 
     if (storage_load_uint16(&coefficent, CONFIGURATION_PID_KP_KEY) == 0) {
         model->config.pid_kp = ((float)coefficent) / 100.;
     }
 
     if (storage_load_uint16(&coefficent, CONFIGURATION_PID_KI_KEY) == 0) {
+
         model->config.pid_ki = ((float)coefficent) / 100.;
     }
 
     if (storage_load_uint16(&coefficent, CONFIGURATION_PID_KD_KEY) == 0) {
         model->config.pid_kd = ((float)coefficent) / 100.;
     }
+
+    model_check_configuration(model);
 }
 
 

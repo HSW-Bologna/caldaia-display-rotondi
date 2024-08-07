@@ -16,6 +16,7 @@ enum {
     BTN_BACK_ID,
     BTN_PREV_ID,
     BTN_NEXT_ID,
+    BTN_OFFSET_ID,
 };
 
 
@@ -59,8 +60,17 @@ static void open_page(pman_handle_t handle, void *state) {
 
     {
         lv_obj_t *lbl = lv_label_create(lv_scr_act());
-        lv_obj_center(lbl);
+        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, -16);
+        lv_obj_set_style_text_font(lbl, STYLE_FONT_SMALL, LV_STATE_DEFAULT);
         pdata->lbl_adc = lbl;
+    }
+
+    {
+        lv_obj_t *btn = lv_btn_create(lv_scr_act());
+        lv_obj_t *lbl = lv_label_create(btn);
+        view_register_object_default_callback(btn, BTN_OFFSET_ID);
+        lv_label_set_text(lbl, "Azzera offset");
+        lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -16);
     }
 
     VIEW_ADD_WATCHED_VARIABLE(&model->run.pressure_millibar, 0);
@@ -123,6 +133,11 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
                             msg.stack_msg                  = PMAN_STACK_MSG_SWAP(&page_test_pid);
                             break;
 
+                        case BTN_OFFSET_ID:
+                            model_calibrate_pressure(model);
+                            update_page(model, pdata);
+                            break;
+
                         default:
                             break;
                     }
@@ -153,9 +168,12 @@ static pman_msg_t page_event(pman_handle_t handle, void *state, pman_event_t eve
 
 
 static void update_page(model_t *model, struct page_data *pdata) {
-    float setpoint = ((float)model->config.pressure_setpoint_decibar) / 10.;
-    lv_label_set_text_fmt(pdata->lbl_adc, "Pressione: %4.1f Bar [%04i]\nFasi: r1=%04i, s=%04i, t=%04i", setpoint,
-                          model->run.pressure_adc, model->run.adc_r1, model->run.adc_s, model->run.adc_t);
+    float pressure = ((float)model_get_calibrated_pressure(model)) / 1000.;
+    float offset   = ((float)model->config.pressure_offset_millibar) / 1000.;
+
+    lv_label_set_text_fmt(pdata->lbl_adc, "Pressione: %2.3f Bar (-%2.3f) [%04i]\nFasi: r1=%04i, s=%04i, t=%04i",
+                          pressure, offset, model->run.pressure_adc, model->run.adc_r1, model->run.adc_s,
+                          model->run.adc_t);
 
     view_common_set_hidden(pdata->img_alarm, !model->run.communication_error);
 }

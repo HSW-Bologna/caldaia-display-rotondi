@@ -339,7 +339,7 @@ static void update_page(model_t *model, struct page_data *pdata) {
     lv_img_set_src(pdata->img_pressostat, &img_pressostat_low);
 
     float setpoint = ((float)model->config.pressure_setpoint_decibar) / 10.;
-    lv_label_set_text_fmt(pdata->lbl_setpoint, "%.1f", setpoint);
+    lv_label_set_text_fmt(pdata->lbl_setpoint, "%2.1f Bar", setpoint);
 
     lv_obj_set_style_opa(pdata->img_heat, (LV_OPA_COVER * model->run.output_percentage) / 100, LV_STATE_DEFAULT);
 

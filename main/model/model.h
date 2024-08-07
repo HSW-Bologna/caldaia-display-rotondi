@@ -16,6 +16,7 @@
 
 struct model {
     struct {
+        uint16_t pressure_offset_millibar;
         uint16_t pressure_setpoint_decibar;
         float    pid_kp;
         float    pid_ki;
@@ -49,10 +50,16 @@ typedef const struct model model_t;
 typedef struct model       mut_model_t;
 
 
-void    model_init(mut_model_t *pmodel);
-void    model_modify_pressure_setpoint(mut_model_t *model, int16_t change);
-void    model_boiler_enable(mut_model_t *model, uint8_t enable);
-uint8_t model_get_language(model_t *model);
+void     model_init(mut_model_t *pmodel);
+void     model_modify_pressure_setpoint(mut_model_t *model, int16_t change);
+void     model_boiler_enable(mut_model_t *model, uint8_t enable);
+uint8_t  model_get_language(model_t *model);
+uint16_t model_get_calibrated_pressure(model_t *model);
+void     model_calibrate_pressure(mut_model_t *model);
+void     model_check_configuration(mut_model_t *model);
+void     model_modify_pid_kp(mut_model_t *model, float change);
+void     model_modify_pid_ki(mut_model_t *model, float change);
+void     model_modify_pid_kd(mut_model_t *model, float change);
 
 
 #endif

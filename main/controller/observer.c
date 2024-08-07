@@ -16,6 +16,8 @@ void observer_init(model_t *model) {
     WATCHER_INIT_STD(&watcher, (void *)model);
     WATCHER_ADD_ENTRY_DELAYED(&watcher, &model->config.pressure_setpoint_decibar, save_parameter,
                               (void *)CONFIGURATION_SETPOINT_KEY, 4000);
+    WATCHER_ADD_ENTRY_DELAYED(&watcher, &model->config.pressure_offset_millibar, save_parameter,
+                              (void *)CONFIGURATION_PRESSURE_OFFSET_KEY, 4000);
     WATCHER_ADD_ENTRY_DELAYED(&watcher, &model->config.pid_kp, save_float_parameter, (void *)CONFIGURATION_PID_KP_KEY, 4000);
     WATCHER_ADD_ENTRY_DELAYED(&watcher, &model->config.pid_ki, save_float_parameter, (void *)CONFIGURATION_PID_KI_KEY, 4000);
     WATCHER_ADD_ENTRY_DELAYED(&watcher, &model->config.pid_kd, save_float_parameter, (void *)CONFIGURATION_PID_KD_KEY, 4000);

@@ -37,6 +37,7 @@ struct __attribute__((packed)) task_message {
             uint8_t  override;
             uint8_t  percentage;
             uint16_t pressure_setpoint_decibar;
+            uint16_t pressure_offset_millibar;
             uint16_t kp;
             uint16_t ki;
             uint16_t kd;
@@ -159,10 +160,11 @@ static void modbus_task(void *args) {
 
                 case TASK_MESSAGE_TAG_SYNC: {
                     modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_OK, .error = 0};
-                    uint16_t          values[6] = {
+                    uint16_t          values[7] = {
                         message.as.sync.power,
+                        message.as.sync.pressure_offset_millibar,
                         ((message.as.sync.override > 0) << 15) | message.as.sync.percentage,
-                        message.as.sync.pressure_setpoint_decibar,
+                        message.as.sync.pressure_setpoint_decibar * 100,
                         message.as.sync.kp,
                         message.as.sync.ki,
                         message.as.sync.kd,

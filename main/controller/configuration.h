@@ -13,6 +13,7 @@ extern const char *CONFIGURATION_SETPOINT_KEY;
 extern const char *CONFIGURATION_PID_KP_KEY;
 extern const char *CONFIGURATION_PID_KI_KEY;
 extern const char *CONFIGURATION_PID_KD_KEY;
+extern const char *CONFIGURATION_PRESSURE_OFFSET_KEY;
 
 
 #endif

@@ -4,6 +4,18 @@
 #include "config/app_config.h"
 
 
+#define MODIFY_WITH_LIMITS(Par, Min, Max, Change, Cast)                                                                \
+    if ((Cast)(Par) + (Change) > (Max)) {                                                                              \
+        (Par) = (Max);                                                                                                 \
+    } else if ((Cast)(Par) + (Change) < (Min)) {                                                                       \
+        (Par) = (Min);                                                                                                 \
+    } else {                                                                                                           \
+        (Par) += (Change);                                                                                             \
+    }
+
+#define CHECK_LIMITS(Par, Min, Max, Cast) MODIFY_WITH_LIMITS(Par, Min, Max, 0, Cast)
+
+
 void model_init(mut_model_t *model) {
     assert(model != NULL);
 
@@ -12,7 +24,7 @@ void model_init(mut_model_t *model) {
     model->run.override_duty_cycle            = 0;
     model->run.overridden_duty_cycle          = 0;
     model->run.communication_error            = 0;
-    model->run.pressure_millibar               = 0;
+    model->run.pressure_millibar              = 0;
     model->run.pressure_adc                   = 0;
     model->run.adc_r1                         = 0;
     model->run.adc_s                          = 0;
@@ -25,6 +37,16 @@ void model_init(mut_model_t *model) {
 }
 
 
+void model_check_configuration(mut_model_t *model) {
+    assert(model != NULL);
+
+    CHECK_LIMITS(model->config.pressure_setpoint_decibar, APP_CONFIG_MIN_PRESSURE_SETPOINT_DECIBAR,
+                 APP_CONFIG_MAX_PRESSURE_SETPOINT_DECIBAR, int16_t);
+    CHECK_LIMITS(model->config.pid_kp, APP_CONFIG_MIN_PID_KP, APP_CONFIG_MAX_PID_KP, float);
+    CHECK_LIMITS(model->config.pid_ki, APP_CONFIG_MIN_PID_KI, APP_CONFIG_MAX_PID_KI, float);
+    CHECK_LIMITS(model->config.pid_kd, APP_CONFIG_MIN_PID_KD, APP_CONFIG_MAX_PID_KD, float);
+}
+
 
 void model_boiler_enable(mut_model_t *model, uint8_t enable) {
     assert(model != NULL);
@@ -36,17 +58,49 @@ void model_boiler_enable(mut_model_t *model, uint8_t enable) {
 void model_modify_pressure_setpoint(mut_model_t *model, int16_t change) {
     assert(model != NULL);
 
-    if ((int16_t)model->config.pressure_setpoint_decibar + change > APP_CONFIG_MAX_PRESSURE_SETPOINT_DECIBAR) {
-        model->config.pressure_setpoint_decibar = APP_CONFIG_MAX_PRESSURE_SETPOINT_DECIBAR;
-    } else if ((int16_t)model->config.pressure_setpoint_decibar + change < APP_CONFIG_MIN_PRESSURE_SETPOINT_DECIBAR) {
-        model->config.pressure_setpoint_decibar = APP_CONFIG_MIN_PRESSURE_SETPOINT_DECIBAR;
-    } else {
-        model->config.pressure_setpoint_decibar += change;
-    }
+    MODIFY_WITH_LIMITS(model->config.pressure_setpoint_decibar, APP_CONFIG_MIN_PRESSURE_SETPOINT_DECIBAR,
+                       APP_CONFIG_MAX_PRESSURE_SETPOINT_DECIBAR, change, int16_t);
+}
+
+
+void model_modify_pid_kp(mut_model_t *model, float change) {
+    assert(model != NULL);
+
+    MODIFY_WITH_LIMITS(model->config.pid_kp, APP_CONFIG_MIN_PID_KP, APP_CONFIG_MAX_PID_KP, change, float);
+}
+
+
+void model_modify_pid_ki(mut_model_t *model, float change) {
+    assert(model != NULL);
+
+    MODIFY_WITH_LIMITS(model->config.pid_ki, APP_CONFIG_MIN_PID_KI, APP_CONFIG_MAX_PID_KI, change, float);
+}
+
+
+void model_modify_pid_kd(mut_model_t *model, float change) {
+    assert(model != NULL);
+
+    MODIFY_WITH_LIMITS(model->config.pid_kd, APP_CONFIG_MIN_PID_KD, APP_CONFIG_MAX_PID_KD, change, float);
 }
 
 
 uint8_t model_get_language(model_t *model) {
     (void)model;
     return 0;
+}
+
+
+void model_calibrate_pressure(mut_model_t *model) {
+    assert(model != NULL);
+
+    model->config.pressure_offset_millibar = model->run.pressure_millibar;
+}
+
+
+uint16_t model_get_calibrated_pressure(model_t *model) {
+    if (model->run.pressure_millibar < model->config.pressure_offset_millibar) {
+        return 0;
+    } else {
+        return model->run.pressure_millibar - model->config.pressure_offset_millibar;
+    }
 }
