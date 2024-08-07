@@ -13,18 +13,11 @@
 #define MODBUS_MESSAGE_QUEUE_SIZE        32
 #define MODBUS_TIMEOUT                   50
 #define MODBUS_MAX_PACKET_SIZE           256
-#define MODBUS_COMMUNICATION_ATTEMPTS    0
+#define MODBUS_COMMUNICATION_ATTEMPTS    3
 
 #define MODBUS_IR_DEVICE_MODEL 0
-/*
-    MODBUS_HR_FIRMWARE_VERSION       ,
-    MODBUS_HR_INSTANT_ANALOG_VALUE_R1 ,
-    MODBUS_HR_INSTANT_ANALOG_VALUE_S  ,
-    MODBUS_HR_INSTANT_ANALOG_VALUE_T  ,
-    MODBUS_HR_REQUIRED_DUTY_CYCLE     ,
-    */
 
-#define MODBUS_HR_DUTY_CYCLE 0
+#define MODBUS_HR_DUTY_POWER 0
 
 
 #define MINION_ADDR 1
@@ -40,9 +33,15 @@ struct __attribute__((packed)) task_message {
     task_message_tag_t tag;
     union {
         struct {
-            uint8_t override;
-            uint8_t percentage;
-        } override_duty_cycle;
+            uint8_t  power;
+            uint8_t  override;
+            uint8_t  percentage;
+            uint16_t pressure_setpoint_decibar;
+            uint16_t pressure_offset_adc;
+            uint16_t kp;
+            uint16_t ki;
+            uint16_t kd;
+        } sync;
     } as;
 };
 
@@ -90,15 +89,21 @@ void modbus_read_state(void) {
 }
 
 
-void modbus_sync(model_t *pmodel) {
+void modbus_sync(model_t *model) {
     struct task_message msg = {
         .tag = TASK_MESSAGE_TAG_SYNC,
         .as =
             {
-                .override_duty_cycle =
+                .sync =
                     {
-                        .override   = pmodel->run.override_duty_cycle,
-                        .percentage = pmodel->run.overridden_duty_cycle,
+                        .power                     = model->run.boiler_enabled,
+                        .pressure_offset_adc = model->config.pressure_offset_adc,
+                        .override                  = model->run.override_duty_cycle,
+                        .percentage                = model->run.overridden_duty_cycle,
+                        .pressure_setpoint_decibar = model->config.pressure_setpoint_decibar,
+                        .kp                        = (uint16_t)(model->config.pid_kp*100),
+                        .ki                        = (uint16_t)(model->config.pid_ki*100),
+                        .kd                        = (uint16_t)(model->config.pid_kd*100),
                     },
             },
     };
@@ -133,19 +138,25 @@ static void modbus_task(void *args) {
             switch (message.tag) {
                 case TASK_MESSAGE_TAG_READ_STATE: {
                     modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_READ_STATE, .error = 0};
-                    uint16_t          values[5] = {0};
+                    uint16_t          values[12] = {0};
                     if (read_input_registers(&master, values, MINION_ADDR, MODBUS_IR_DEVICE_MODEL,
                                              sizeof(values) / sizeof(values[0]))) {
                         response.error = 1;
                     } else {
-                        response.as.state.machine_model   = values[0];
-                        response.as.state.version_major   = (values[1] >> 11) & 0x1F;
-                        response.as.state.version_minor   = (values[1] >> 6) & 0x1F;
-                        response.as.state.version_patch   = values[1] & 0x3F;
-                        response.as.state.analog_value_r1 = values[2];
-                        response.as.state.analog_value_s  = values[3];
-                        response.as.state.analog_value_t  = values[4];
-                        ESP_LOGI(TAG,   "state read succesffull");
+                        response.as.state.machine_model         = values[0];
+                        response.as.state.version_major         = (values[1] >> 11) & 0x1F;
+                        response.as.state.version_minor         = (values[1] >> 6) & 0x1F;
+                        response.as.state.version_patch         = values[1] & 0x3F;
+                        response.as.state.analog_value_r1       = values[2];
+                        response.as.state.analog_value_s        = values[3];
+                        response.as.state.analog_value_t        = values[4];
+                        response.as.state.analog_value_pressure = values[5];
+                        response.as.state.pressure_centibar     = values[6];
+                        response.as.state.output_percentage     = values[7];
+                        response.as.state.pid_p_output     = values[8];
+                        response.as.state.pid_i_output     = values[9];
+                        response.as.state.pid_d_output     = values[10];
+                        response.as.state.pid_error             = values[11];
                     }
                     xQueueSend(responseq, &response, portMAX_DELAY);
                     break;
@@ -153,13 +164,19 @@ static void modbus_task(void *args) {
 
                 case TASK_MESSAGE_TAG_SYNC: {
                     modbus_response_t response  = {.tag = MODBUS_RESPONSE_TAG_OK, .error = 0};
-                    uint16_t          values[1] = {((message.as.override_duty_cycle.override > 0) << 15) |
-                                                   message.as.override_duty_cycle.percentage};
-                    if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_CYCLE, values,
+                    uint16_t          values[7] = {
+                        message.as.sync.power,
+                        message.as.sync.pressure_offset_adc,
+                        ((message.as.sync.override > 0) << 15) | message.as.sync.percentage,
+                        message.as.sync.pressure_setpoint_decibar*10,
+                        message.as.sync.kp,
+                        message.as.sync.ki,
+                        message.as.sync.kd,
+                    };
+                    //ESP_LOG_BUFFER_HEX(TAG, values, 7);
+                    if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_POWER, values,
                                                 sizeof(values) / sizeof(values[0]))) {
                         response.error = 1;
-                    } else {
-                        ESP_LOGI(TAG,   "sync succesffull");
                     }
                     xQueueSend(responseq, &response, portMAX_DELAY);
                     break;
@@ -324,7 +341,7 @@ static int read_input_registers(ModbusMaster *master, uint16_t *registers, uint8
     } while (res && ++counter < MODBUS_COMMUNICATION_ATTEMPTS);
 
     if (res) {
-        // ESP_LOGW(TAG, "ERROR!");
+        ESP_LOGW(TAG, "ERROR!");
     } else {
         ESP_LOGD(TAG, "Success");
     }

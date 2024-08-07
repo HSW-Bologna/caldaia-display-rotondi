@@ -49,7 +49,7 @@ void storage_init(void) {
 }
 
 
-int storage_load_uint8(uint8_t *value, char *key) {
+int storage_load_uint8(uint8_t *value, const char *key) {
     nvs_handle_t handle;
     esp_err_t    err;
     assert(strlen(key) <= 15);
@@ -66,7 +66,7 @@ int storage_load_uint8(uint8_t *value, char *key) {
 }
 
 
-void storage_save_uint8(uint8_t *value, char *key) {
+void storage_save_uint8(uint8_t *value, const char *key) {
     nvs_handle_t handle;
     assert(strlen(key) <= 15);
 
@@ -86,7 +86,7 @@ void storage_save_uint8(uint8_t *value, char *key) {
 }
 
 
-int storage_load_uint16(uint16_t *value, char *key) {
+int storage_load_uint16(uint16_t *value, const char *key) {
     nvs_handle_t handle;
     esp_err_t    err;
     assert(strlen(key) <= 15);
@@ -103,7 +103,7 @@ int storage_load_uint16(uint16_t *value, char *key) {
 }
 
 
-void storage_save_uint16(uint16_t *value, char *key) {
+void storage_save_uint16(uint16_t *value, const char *key) {
     nvs_handle_t handle;
     ESP_LOGI(TAG, "Trying to save key %s", key);
     assert(strlen(key) <= 15);
@@ -124,7 +124,7 @@ void storage_save_uint16(uint16_t *value, char *key) {
 }
 
 
-int storage_load_uint32(uint32_t *value, char *key) {
+int storage_load_uint32(uint32_t *value, const char *key) {
     nvs_handle_t handle;
     esp_err_t    err;
     assert(strlen(key) <= 15);
@@ -141,7 +141,7 @@ int storage_load_uint32(uint32_t *value, char *key) {
 }
 
 
-void storage_save_uint32(uint32_t *value, char *key) {
+void storage_save_uint32(uint32_t *value, const char *key) {
     nvs_handle_t handle;
     ESP_LOGI(TAG, "Trying to save key %s", key);
     assert(strlen(key) <= 15);
@@ -162,7 +162,7 @@ void storage_save_uint32(uint32_t *value, char *key) {
 }
 
 
-int storage_load_uint64(uint64_t *value, char *key) {
+int storage_load_uint64(uint64_t *value, const char *key) {
     nvs_handle_t handle;
     esp_err_t    err;
     assert(strlen(key) <= 15);
@@ -179,7 +179,7 @@ int storage_load_uint64(uint64_t *value, char *key) {
 }
 
 
-void storage_save_uint64(uint64_t *value, char *key) {
+void storage_save_uint64(uint64_t *value, const char *key) {
     nvs_handle_t handle;
     ESP_LOGI(TAG, "Trying to save key %s", key);
     assert(strlen(key) <= 15);
@@ -200,7 +200,7 @@ void storage_save_uint64(uint64_t *value, char *key) {
 }
 
 
-int storage_load_blob(void *value, size_t len, char *key) {
+int storage_load_blob(void *value, size_t len, const char *key) {
     nvs_handle_t handle;
     esp_err_t    err;
     assert(strlen(key) <= 15);
@@ -217,7 +217,7 @@ int storage_load_blob(void *value, size_t len, char *key) {
 }
 
 
-void storage_save_blob(void *value, size_t len, char *key) {
+void storage_save_blob(void *value, size_t len, const char *key) {
     nvs_handle_t handle;
     ESP_LOGI(TAG, "Trying to save key %s", key);
     assert(strlen(key) <= 15);

@@ -41,14 +41,13 @@ void view_init(model_t *p_model, pman_user_msg_cb_t controller_cb, lv_display_fl
     lv_display_set_buffers(display, buf_1, NULL, VIEW_LVGL_BUFFER_SIZE, LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(display, flush_cb);
 
-    style_init();
-    theme_init(display);
-
     lv_indev_t *touch_indev = lv_indev_create();
     lv_indev_set_type(touch_indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(touch_indev, read_cb);
-
 #endif
+
+    style_init();
+    theme_init(display);
 
     pman_init(&pman, (void *)p_model, touch_indev, controller_cb, NULL);
 }
@@ -94,7 +93,9 @@ void view_register_object_default_callback_with_number(lv_obj_t *obj, int id, in
 
     lv_obj_set_user_data(obj, data);
     pman_register_obj_event(&pman, obj, LV_EVENT_PRESSED);
+    pman_register_obj_event(&pman, obj, LV_EVENT_PRESSING);
     pman_register_obj_event(&pman, obj, LV_EVENT_CLICKED);
+    pman_register_obj_event(&pman, obj, LV_EVENT_READY);
     pman_register_obj_event(&pman, obj, LV_EVENT_VALUE_CHANGED);
     pman_register_obj_event(&pman, obj, LV_EVENT_LONG_PRESSED);
     pman_register_obj_event(&pman, obj, LV_EVENT_LONG_PRESSED_REPEAT);

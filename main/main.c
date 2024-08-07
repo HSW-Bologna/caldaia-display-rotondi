@@ -12,6 +12,7 @@
 #include "bsp/tft/display.h"
 #include "bsp/tft/touch.h"
 #include "bsp/heartbit.h"
+#include "bsp/storage.h"
 
 
 static const char *TAG = "Main";
@@ -23,6 +24,7 @@ void app_main(void) {
     mut_model_t model = {0};
 
     bsp_system_init();
+    storage_init();
     bsp_tft_display_init(view_display_flush_ready, VIEW_LVGL_BUFFER_SIZE);
     bsp_tft_touch_init();
     bsp_rs485_init();
