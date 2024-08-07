@@ -11,9 +11,9 @@
 #define MODBUS_RESPONSE_03_LEN(data_len) (5 + data_len * 2)
 #define MODBUS_RESPONSE_05_LEN           8
 #define MODBUS_MESSAGE_QUEUE_SIZE        32
-#define MODBUS_TIMEOUT                   40
+#define MODBUS_TIMEOUT                   50
 #define MODBUS_MAX_PACKET_SIZE           256
-#define MODBUS_COMMUNICATION_ATTEMPTS    5
+#define MODBUS_COMMUNICATION_ATTEMPTS    0
 
 #define MODBUS_IR_DEVICE_MODEL 0
 /*
@@ -145,6 +145,7 @@ static void modbus_task(void *args) {
                         response.as.state.analog_value_r1 = values[2];
                         response.as.state.analog_value_s  = values[3];
                         response.as.state.analog_value_t  = values[4];
+                        ESP_LOGI(TAG,   "state read succesffull");
                     }
                     xQueueSend(responseq, &response, portMAX_DELAY);
                     break;
@@ -157,6 +158,8 @@ static void modbus_task(void *args) {
                     if (write_holding_registers(&master, MINION_ADDR, MODBUS_HR_DUTY_CYCLE, values,
                                                 sizeof(values) / sizeof(values[0]))) {
                         response.error = 1;
+                    } else {
+                        ESP_LOGI(TAG,   "sync succesffull");
                     }
                     xQueueSend(responseq, &response, portMAX_DELAY);
                     break;
@@ -314,7 +317,7 @@ static int read_input_registers(ModbusMaster *master, uint16_t *registers, uint8
                                          buffer, len);
 
         if (!modbusIsOk(err)) {
-            // ESP_LOGW(TAG, "Read input registers for %i error (%i): %i %i", address, len, err.source, err.error);
+            ESP_LOGW(TAG, "Read input registers for %i error (%i): %i %i", address, len, err.source, err.error);
             res = 1;
             vTaskDelay(pdMS_TO_TICKS(MODBUS_TIMEOUT));
         }

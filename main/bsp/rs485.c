@@ -69,7 +69,7 @@ void bsp_rs485_write(uint8_t *buffer, size_t len) {
     esp_rom_delay_us(10);
     uart_write_bytes(PORTNUM, buffer, len);
     ESP_ERROR_CHECK(uart_wait_tx_done(PORTNUM, portMAX_DELAY));
-    esp_rom_delay_us(200);
+    esp_rom_delay_us(10);
     gpio_set_level(BSP_HAP_DIR, 0);
     // In this particular project asserting/deasserting the DIR line causes a couple of null bytes to be received, so we
     // must flush them
